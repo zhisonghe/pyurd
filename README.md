@@ -2,6 +2,8 @@
 
 A Python reimplementation of the [URD](https://github.com/farrellja/URD) R package for single-cell trajectory inference, compatible with the [scanpy](https://scanpy.readthedocs.io/) / [AnnData](https://anndata.readthedocs.io/) ecosystem.
 
+A full end-to-end walkthrough on a brain organoid dataset is available in [`tutorial.ipynb`](tutorial.ipynb).
+
 ## Implemented functions
 
 | Python function | R equivalent | Description |
