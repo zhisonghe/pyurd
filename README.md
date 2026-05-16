@@ -29,8 +29,17 @@ A Python reimplementation of the [URD](https://github.com/farrellja/URD) R packa
 
 ## Installation
 
+Install directly from GitHub (no clone required):
+
 ```bash
-# Editable install from the local repo
+pip install git+https://github.com/zhisonghe/pyurd.git
+# or with uv:
+uv pip install git+https://github.com/zhisonghe/pyurd.git
+```
+
+For an editable/development install after cloning the repo:
+
+```bash
 pip install -e ".[full]"
 # or with uv:
 uv pip install -e ".[full]"
