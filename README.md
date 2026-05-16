@@ -6,6 +6,7 @@ A Python reimplementation of the [URD](https://github.com/farrellja/URD) R packa
 
 | Python function | R equivalent | Description |
 |---|---|---|
+| `prepare_connectivities` | *(new)* | Build diffusion-map–based connectivity for flood pseudotime |
 | `flood_pseudotime` | `floodPseudotime` | Probabilistic BFS pseudotime simulations |
 | `flood_pseudotime_process` | `floodPseudotimeProcess` | Convert simulations → pseudotime in `adata.obs` |
 | `pseudotime_determine_logistic` | `pseudotimeDetermineLogistic` | Fit logistic bias parameters |
@@ -25,7 +26,7 @@ A Python reimplementation of the [URD](https://github.com/farrellja/URD) R packa
 | `make_uns_serialisable` | *(new)* | Convert `adata.uns` to HDF5-safe types |
 | `restore_urd` | *(new)* | Restore DataFrames in a loaded URD dict |
 
-> **Note:** Diffusion maps are computed via `sc.tl.diffmap()` in scanpy.  The transition matrix used by pyURD comes from `adata.obsp['connectivities']` (set by `sc.pp.neighbors()`).
+> **Note:** `prepare_connectivities()` reproduces the original URD behaviour by computing a diffusion map and rebuilding a k-NN graph in diffusion-component space for flood pseudotime.  This is one option; you can also pass any `adata.obsp` key directly via `transition_key` (e.g. `'connectivities'` from `sc.pp.neighbors()`).  The pseudotime-biased random-walk step (`pseudotime_weight_transition_matrix`) uses the standard k-NN connectivity matrix separately.
 
 ## Installation
 
@@ -62,16 +63,23 @@ sc.pp.neighbors(adata, n_neighbors=30, use_rep="X_pca")
 # Define root cells (earliest developmental stage)
 root_cells = adata.obs_names[adata.obs["stage"] == "HIGH"].tolist()
 
-# 1. Flood pseudotime
-floods = pyurd.flood_pseudotime(adata, root_cells, n=50)
+# 1a. (Optional) Build diffusion-map–based connectivity to reproduce the original
+#     URD implementation.  Runs sc.tl.diffmap internally, then rebuilds a k-NN
+#     graph in diffusion-component space.  Skip this and use transition_key=
+#     'connectivities' if you prefer to flood directly on the PCA neighbour graph.
+transition_key = pyurd.prepare_connectivities(adata, n_neighbors=30, n_dcs=10)
+
+# 1b. Flood pseudotime
+floods = pyurd.flood_pseudotime(adata, root_cells, n=50, transition_key=transition_key)
 pyurd.flood_pseudotime_process(adata, floods, floods_name="pseudotime")
 
 # 2. Bias transition matrix
+#    Uses the same transition matrix as flood pseudotime.
 lp = pyurd.pseudotime_determine_logistic(
     adata, "pseudotime", optimal_cells_forward=20, max_cells_back=40
 )
 biased_tm = pyurd.pseudotime_weight_transition_matrix(
-    adata, "pseudotime", logistic_params=lp
+    adata, "pseudotime", logistic_params=lp, transition_key=transition_key
 )
 
 # 3. Random walks
@@ -130,7 +138,7 @@ If you need finer control, use `make_uns_serialisable` and `restore_urd` directl
 ## Differences from the R package
 
 1. **Diffusion map**: not reimplemented; use `sc.tl.diffmap()`.
-2. **Transition matrix source**: uses `adata.obsp['connectivities']` by default.
+2. **Transition matrix source**: `prepare_connectivities()` reproduces the original URD by building a diffusion-map k-NN graph; pass its return value as `transition_key` to both `flood_pseudotime` and `pseudotime_weight_transition_matrix`.  You can equally pass `'connectivities'` (the raw PCA k-NN graph from `sc.pp.neighbors()`) — the choice is yours.
 3. **Parallelism**: flood simulations can be parallelised with `joblib` via the `n_jobs` parameter.
 4. **Save/load helpers**: `save_urd` / `load_urd` replace manual serialisation boilerplate.
 5. **3D / force-directed layout**: not implemented in this version.

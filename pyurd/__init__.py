@@ -11,11 +11,13 @@ Quick-start workflow
 
     # 1. Compute diffusion map / neighbourhood graph with scanpy
     sc.pp.neighbors(adata, n_neighbors=30, use_rep="X_pca")
-    sc.tl.diffmap(adata)
 
-    # 2. Flood pseudotime from root cells
+    # 2. Build diffusion-map–based connectivity for flood pseudotime
+    transition_key = pyurd.prepare_connectivities(adata)
+
+    # 3. Flood pseudotime from root cells
     root_cells = adata.obs_names[adata.obs["stage"] == "stage_0"].tolist()
-    floods = pyurd.flood_pseudotime(adata, root_cells, n=50)
+    floods = pyurd.flood_pseudotime(adata, root_cells, n=50, transition_key=transition_key)
     pyurd.flood_pseudotime_process(adata, floods, floods_name="pseudotime")
 
     # 3. Determine logistic parameters for biased random walks
@@ -52,6 +54,7 @@ Quick-start workflow
 from .flood import (
     flood_pseudotime,
     flood_pseudotime_process,
+    prepare_connectivities,
 )
 from .diffusion import (
     pseudotime_determine_logistic,
@@ -77,6 +80,7 @@ __all__ = [
     # Flood pseudotime
     "flood_pseudotime",
     "flood_pseudotime_process",
+    "prepare_connectivities",
     # Pseudotime weighting & random walks
     "pseudotime_determine_logistic",
     "pseudotime_weight_transition_matrix",

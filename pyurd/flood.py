@@ -265,6 +265,114 @@ def _run_one_flood(tm_flood, cell_names, root_cells, minimum_cells_flooded,
                                  minimum_cells_flooded, verbose_freq)
 
 
+def prepare_connectivities(
+    adata: AnnData,
+    n_neighbors: int = 30,
+    n_dcs: int = 10,
+    neighbors_key: Optional[str] = None,
+    key_added: str = "diffmap_flood",
+    run_diffmap: bool = True,
+    verbose: bool = True,
+) -> str:
+    """Build a diffusion-map–based connectivity matrix for flood pseudotime.
+
+    In URD, flood pseudotime propagates through the diffusion-map transition
+    graph rather than the raw k-NN graph.  This function:
+
+    1. Optionally runs ``sc.tl.diffmap`` on the existing neighbour graph.
+    2. Re-builds a k-NN graph in diffusion-component space via
+       ``sc.pp.neighbors(..., use_rep='X_diffmap')``.
+    3. Stores the result in ``adata.obsp[f'{key_added}_connectivities']``.
+
+    The returned string can be passed directly as *transition_key* to
+    :func:`flood_pseudotime`.
+
+    Parameters
+    ----------
+    adata
+        AnnData object.  Must have a pre-computed neighbour graph in
+        ``adata.uns['neighbors']`` (or ``adata.uns[neighbors_key]``) unless
+        *run_diffmap* is *False* and ``adata.obsm['X_diffmap']`` already
+        exists.
+    n_neighbors
+        Number of neighbours for the diffusion-map k-NN graph.
+    n_dcs
+        Number of diffusion components to compute / use.
+    neighbors_key
+        Key in ``adata.uns`` for the existing neighbour graph used when
+        computing the diffusion map.  *None* uses the scanpy default
+        (``'neighbors'``).
+    key_added
+        Prefix for the new connectivity matrix stored in ``adata.obsp``.
+        The actual key will be ``f'{key_added}_connectivities'``.
+    run_diffmap
+        If *True* (default), run ``sc.tl.diffmap`` first.  Set to *False*
+        if ``adata.obsm['X_diffmap']`` is already up-to-date.
+    verbose
+        Print progress messages.
+
+    Returns
+    -------
+    str
+        The ``adata.obsp`` key for the new connectivity matrix, i.e.
+        ``f'{key_added}_connectivities'``.  Pass this to
+        :func:`flood_pseudotime` as *transition_key*.
+
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import pyurd
+    >>> sc.pp.neighbors(adata, n_neighbors=30, use_rep="X_pca")
+    >>> transition_key = pyurd.prepare_connectivities(adata)
+    >>> floods = pyurd.flood_pseudotime(adata, root_cells, transition_key=transition_key)
+    """
+    try:
+        import scanpy as sc
+    except ImportError:
+        raise ImportError(
+            "scanpy is required for prepare_connectivities. "
+            "Install it with: pip install scanpy"
+        )
+
+    uns_key = neighbors_key if neighbors_key is not None else "neighbors"
+
+    if run_diffmap:
+        if uns_key not in adata.uns:
+            raise KeyError(
+                f"No neighbour graph found in adata.uns['{uns_key}']. "
+                "Run sc.pp.neighbors() first."
+            )
+        if verbose:
+            print(f"Computing diffusion map ({n_dcs} components) ...")
+        sc.tl.diffmap(adata, n_comps=n_dcs, neighbors_key=neighbors_key)
+    else:
+        if "X_diffmap" not in adata.obsm:
+            raise KeyError(
+                "adata.obsm['X_diffmap'] not found and run_diffmap=False. "
+                "Either run sc.tl.diffmap() first or set run_diffmap=True."
+            )
+
+    if verbose:
+        print(
+            f"Building k-NN graph in diffusion-map space "
+            f"(n_neighbors={n_neighbors}, n_dcs={n_dcs}) ..."
+        )
+    sc.pp.neighbors(
+        adata,
+        n_neighbors=n_neighbors,
+        use_rep="X_diffmap",
+        n_pcs=n_dcs,
+        key_added=key_added,
+    )
+
+    transition_key = f"{key_added}_connectivities"
+    if verbose:
+        print(f"Diffusion-map connectivity stored in adata.obsp['{transition_key}']")
+        print(f"Pass transition_key='{transition_key}' to pyurd.flood_pseudotime().")
+
+    return transition_key
+
+
 def flood_pseudotime_process(
     adata: AnnData,
     floods: pd.DataFrame,
